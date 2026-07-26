@@ -86,6 +86,11 @@
     ⚠️ ยังไม่ได้ตั้งค่า API_URL — เปิดไฟล์ index.html แล้วแก้ตัวแปร <code>API_URL</code> ให้เป็น URL ของ Apps Script Web App ที่ Deploy แล้ว (ดู README.md)
   </div>
 
+  <div id="inAppBrowserBanner" style="display:none; max-width:1100px; margin:0 auto 16px; background:#fff; border-radius:14px; padding:14px 16px; text-align:center; box-shadow:0 8px 20px rgba(0,0,0,.2);">
+    <div class="small mb-2">⚠️ คุณกำลังเปิดผ่านแอปแชท (LINE/Telegram) ซึ่งมักเปิดกล้องถ่ายเซลฟี่ไม่ได้</div>
+    <button class="btn btn-primary btn-sm" onclick="forceOpenExternalBrowser_()">🌐 เปิดในเบราว์เซอร์ (Chrome/Safari)</button>
+  </div>
+
   <div class="wrap">
 
     <!-- ================= LEFT: LOGIN / CLOCK ================= -->
@@ -262,7 +267,6 @@
     </div>
   </div>
 </div>
-
   </div>
 
   <script>
@@ -272,7 +276,7 @@
     // 🔧 แก้บรรทัดนี้เป็น Web App URL ที่ได้จากการ Deploy Apps Script
     // (Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone)
     // รูปแบบจะเป็น: https://script.google.com/macros/s/XXXXXXXXXXXX/exec
-    const API_URL = "https://script.google.com/macros/s/AKfycbxnAPAQDuLvClLZw646aY1CZce9ad8CrBCttjIVEP4xnKUHzgcM-7jR8HxcFgnVC-OWpQ/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbzha2KAWC_ThbDRa7w7Vxp9GTyb_t5A1EGCgrQDFq7lHyXnzPJjDRxrwwGRZR6D-H7ohQ/exec";
 
     if (!API_URL || API_URL.indexOf("YOUR_") === 0) {
       document.getElementById("apiWarning").style.display = "block";
@@ -326,7 +330,85 @@
       setInterval(updateClock, 1000);
       setInterval(loadDashboard, 30000); // รีเฟรช Dashboard อัตโนมัติทุก 30 วิ
       setInterval(refreshPendingLeaveBadge, 30000); // รีเฟรชจำนวนคำขอลารออนุมัติทุก 30 วิ
+
+      checkInAppBrowser_();
     });
+
+    // ======================
+    // 🚪 ตรวจจับเบราว์เซอร์ในแอป (LINE/Telegram/FB/IG) แล้วชวนออกไปเปิดใน Chrome/Safari
+    // ======================
+    // เว็บวิวพวกนี้บล็อกกล้อง (getUserMedia) เสมอ และบางเครื่อง (โดยเฉพาะ LINE บน iOS) ยังบล็อก
+    // แม้แต่ input capture ด้วย เพราะตัวแอปแม่ไม่ได้รับสิทธิ์กล้องจากระบบปฏิบัติการ ทางที่ชัวร์ที่สุด
+    // คือให้ผู้ใช้เปิดผ่านเบราว์เซอร์จริง จึงเตือนตั้งแต่หน้าแรกเลย ไม่ต้องรอให้กดปุ่มแล้วเจอปัญหาก่อน
+    function isInAppBrowser_() {
+      const ua = navigator.userAgent || '';
+      return /Line\//i.test(ua) || /Telegram/i.test(ua) || /FBAN|FBAV/i.test(ua) || /Instagram/i.test(ua);
+    }
+
+    function checkInAppBrowser_() {
+      if (!isInAppBrowser_()) return;
+
+      document.getElementById("inAppBrowserBanner").style.display = "block";
+
+      Swal.fire({
+        icon: 'warning',
+        title: 'แนะนำให้เปิดในเบราว์เซอร์ปกติ',
+        html: 'คุณกำลังเปิดผ่านแอปแชท (LINE/Telegram) ซึ่งมักเปิดกล้องถ่ายเซลฟี่ไม่ได้<br>' +
+              'กดปุ่มด้านล่างเพื่อลองเปิดใน Chrome/Safari โดยตรง',
+        showCancelButton: true,
+        confirmButtonText: '🌐 เปิดในเบราว์เซอร์',
+        cancelButtonText: 'ใช้ต่อในแอปนี้ก่อน'
+      }).then(function (res) {
+        if (res.isConfirmed) forceOpenExternalBrowser_();
+      });
+    }
+
+    // พยายามเด้งออกไปเปิดลิงก์ปัจจุบันในเบราว์เซอร์จริงให้อัตโนมัติ
+    // Android: ใช้ intent:// เปิด Chrome ตรงๆ ได้ผลดีเกือบทุกกรณี
+    // iOS: ใช้ scheme x-safari-https:// ซึ่งได้ผลในหลายกรณีแต่ไม่ 100% (ข้อจำกัดของ Apple)
+    //      ถ้าไม่สำเร็จ จะโชว์วิธีกดเองสำรองให้ทันที
+    function forceOpenExternalBrowser_() {
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const currentUrl = window.location.href;
+      const urlNoScheme = currentUrl.replace(/^https?:\/\//, '');
+
+      if (isAndroid) {
+        window.location.href = 'intent://' + urlNoScheme + '#Intent;scheme=https;package=com.android.chrome;end';
+        // เผื่อ intent:// ไม่ทำงาน (ไม่มี Chrome หรือเวอร์ชันเก่า) ให้โชว์วิธีสำรองหลังจากรอสักครู่
+        setTimeout(showManualOpenInstructions_, 1500);
+        return;
+      }
+
+      if (isIOS) {
+        window.location.href = 'x-safari-https://' + urlNoScheme;
+        setTimeout(showManualOpenInstructions_, 1500);
+        return;
+      }
+
+      showManualOpenInstructions_();
+    }
+
+    function showManualOpenInstructions_() {
+      const currentUrl = window.location.href;
+      const canCopy = navigator.clipboard && navigator.clipboard.writeText;
+      Swal.fire({
+        icon: 'info',
+        title: 'เปิดลิงก์นี้ในเบราว์เซอร์',
+        html:
+          'หากไม่ได้เด้งไปเบราว์เซอร์อัตโนมัติ กรุณาแตะ <b>⋮ หรือ ...</b> มุมขวาบนของหน้าจอ แล้วเลือก ' +
+          '<b>"เปิดในเบราว์เซอร์" (Open in browser)</b><br><br>' +
+          (canCopy ? 'หรือกดปุ่มด้านล่างเพื่อคัดลอกลิงก์ไปวางใน' + (/iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'Safari' : 'Chrome') + ' เอง' : ''),
+        confirmButtonText: canCopy ? '📋 คัดลอกลิงก์' : 'เข้าใจแล้ว'
+      }).then(function (res) {
+        if (res.isConfirmed && canCopy) {
+          navigator.clipboard.writeText(currentUrl).then(function () {
+            Swal.fire('คัดลอกแล้ว', 'วางลิงก์ในเบราว์เซอร์ (Chrome/Safari) แล้วเปิดได้เลย', 'success');
+          });
+        }
+      });
+    }
 
     function updateClock() {
       const now = new Date();
@@ -500,7 +582,22 @@
       return new Promise(function (resolve, reject) {
         const input = document.getElementById("photoInput");
         input.value = "";
+
+        // 🛠️ FIX: ตรวจจับอาการ "เงียบกริ๊บ" — ถ้ากล้อง/แอปเลือกไฟล์เปิดสำเร็จ หน้าเว็บจะถูก blur
+        // (สลับไปแอปกล้อง) แต่ถ้าผ่านไปสักพักแล้วยังไม่ blur เลย แปลว่าเบราว์เซอร์ในแอปบล็อกไว้
+        // ทั้งหมด (พบมากใน LINE บน iOS) จึงเตือนผู้ใช้ทันทีแทนที่จะปล่อยให้รอเฉยๆ ไม่รู้ว่าเกิดอะไรขึ้น
+        let didBlur = false;
+        const onBlur = function () { didBlur = true; };
+        window.addEventListener('blur', onBlur, { once: true });
+        const stallTimer = setTimeout(function () {
+          if (!didBlur && isInAppBrowser_()) {
+            setStatusMessage_('⚠️ กล้องอาจเปิดไม่ได้ในแอปนี้ — แนะนำเปิดในเบราว์เซอร์ (ปุ่มด้านบน)', 'alert-warning');
+          }
+        }, 2500);
+
         input.onchange = function () {
+          clearTimeout(stallTimer);
+          window.removeEventListener('blur', onBlur);
           const file = input.files[0];
           if (!file) { reject(new Error("กรุณาถ่ายภาพยืนยันตัวตนก่อนลงเวลา")); return; }
           const reader = new FileReader();
@@ -608,12 +705,20 @@
     function doClockIn() { runClock('clockIn'); }
     function doClockOut() { runClock('clockOut'); }
 
+    // 🛠️ FIX: เดิมขอ GPS (async) ก่อนแล้วค่อยเรียกกล้องทีหลัง — เบราว์เซอร์ในแอปอย่าง LINE
+    // จะตัดสิทธิ์ "user gesture" ทิ้งถ้าสั่งเปิดกล้อง/ไฟล์หลังรอ Promise อื่นมาก่อน ทำให้กล้อง/ไฟล์
+    // ไม่เปิดเลยแบบไม่มี error ("เงียบกริ๊บ") จึงสลับมาเรียกกล้องทันทีเป็นอย่างแรก (ยังอยู่ในบริบท
+    // การกดปุ่มโดยตรง) แล้วค่อยขอ GPS ทีหลัง พร้อมอัปเดตข้อความสถานะทุกขั้นตอนไม่ให้เงียบอีก
     function runClock(fnName) {
       if (!currentEmployee) return;
 
-      getPosition()
-        .then(function (pos) {
-          return captureSelfie().then(function (photo) {
+      setStatusMessage_('📸 กำลังเปิดกล้อง กรุณารอสักครู่...', 'alert-info');
+
+      captureSelfie()
+        .then(function (photo) {
+          setStatusMessage_('📍 กำลังตรวจสอบตำแหน่ง GPS...', 'alert-info');
+          return getPosition().then(function (pos) {
+            setStatusMessage_('💾 กำลังบันทึกข้อมูล...', 'alert-info');
             Swal.showLoading();
             return callApi(fnName, [currentEmployee.id, lastPin, pos.lat, pos.lng, photo]);
           });
@@ -621,8 +726,18 @@
         .then(onClockResult)
         .catch(function (err) {
           Swal.close();
-          Swal.fire("ไม่สำเร็จ", (err && err.message) || "ไม่สามารถอ่านตำแหน่ง/ภาพถ่ายได้", "error");
+          const msg = (err && err.userCancelled) ? 'ยกเลิกการถ่ายภาพ' : ((err && err.message) || "ไม่สามารถอ่านตำแหน่ง/ภาพถ่ายได้");
+          setStatusMessage_(msg, 'alert-danger');
+          if (!(err && err.userCancelled)) {
+            Swal.fire("ไม่สำเร็จ", msg, "error");
+          }
         });
+    }
+
+    function setStatusMessage_(text, alertClass) {
+      const box = document.getElementById("message");
+      box.className = "alert " + (alertClass || 'alert-light') + " text-center mt-2";
+      box.innerHTML = text;
     }
 
     function onClockResult(res) {
